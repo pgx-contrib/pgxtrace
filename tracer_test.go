@@ -1,11 +1,4 @@
-# pgxtrace
-
-A trace package for pgx
-
-## Getting Started
-
-```golang
-package main
+package pgxtrace_test
 
 import (
 	"context"
@@ -15,7 +8,9 @@ import (
 	"github.com/pgx-contrib/pgxtrace"
 )
 
-func main() {
+var count int
+
+func ExampleCompositeQueryTracer() {
 	config, err := pgxpool.ParseConfig(os.Getenv("PGX_DATABASE_URL"))
 	if err != nil {
 		panic(err)
@@ -33,4 +28,3 @@ func main() {
 		panic(err)
 	}
 }
-```
