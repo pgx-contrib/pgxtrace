@@ -2,7 +2,7 @@ module github.com/pgx-contrib/pgxtrace
 
 go 1.22.0
 
-require github.com/jackc/pgx/v5 v5.5.5
+require github.com/jackc/pgx/v5 v5.6.0
 
 require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
