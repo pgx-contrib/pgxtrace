@@ -17,6 +17,7 @@ type mockQueryTracer struct {
 	id         int
 	startCalls int
 	endCalls   int
+	endLog     *[]int // shared across instances to record End call order
 }
 
 func (m *mockQueryTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryStartData) context.Context {
@@ -26,22 +27,26 @@ func (m *mockQueryTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, _ pg
 
 func (m *mockQueryTracer) TraceQueryEnd(_ context.Context, _ *pgx.Conn, _ pgx.TraceQueryEndData) {
 	m.endCalls++
+	if m.endLog != nil {
+		*m.endLog = append(*m.endLog, m.id)
+	}
 }
 
 // mockAllTracer implements all five pgx tracer interfaces.
 type mockAllTracer struct {
-	id                  int
-	queryStartCalls     int
-	queryEndCalls       int
-	connectStartCalls   int
-	connectEndCalls     int
-	batchStartCalls     int
-	batchQueryCalls     int
-	batchEndCalls       int
-	prepareStartCalls   int
-	prepareEndCalls     int
-	copyFromStartCalls  int
-	copyFromEndCalls    int
+	id                 int
+	queryStartCalls    int
+	queryEndCalls      int
+	connectStartCalls  int
+	connectEndCalls    int
+	batchStartCalls    int
+	batchQueryCalls    int
+	batchEndCalls      int
+	prepareStartCalls  int
+	prepareEndCalls    int
+	copyFromStartCalls int
+	copyFromEndCalls   int
+	endLog             *[]int // shared across instances to record End call order
 }
 
 func (m *mockAllTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryStartData) context.Context {
@@ -51,6 +56,9 @@ func (m *mockAllTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, _ pgx.
 
 func (m *mockAllTracer) TraceQueryEnd(_ context.Context, _ *pgx.Conn, _ pgx.TraceQueryEndData) {
 	m.queryEndCalls++
+	if m.endLog != nil {
+		*m.endLog = append(*m.endLog, m.id)
+	}
 }
 
 func (m *mockAllTracer) TraceConnectStart(ctx context.Context, _ pgx.TraceConnectStartData) context.Context {
@@ -60,6 +68,9 @@ func (m *mockAllTracer) TraceConnectStart(ctx context.Context, _ pgx.TraceConnec
 
 func (m *mockAllTracer) TraceConnectEnd(_ context.Context, _ pgx.TraceConnectEndData) {
 	m.connectEndCalls++
+	if m.endLog != nil {
+		*m.endLog = append(*m.endLog, m.id)
+	}
 }
 
 func (m *mockAllTracer) TraceBatchStart(ctx context.Context, _ *pgx.Conn, _ pgx.TraceBatchStartData) context.Context {
@@ -73,6 +84,9 @@ func (m *mockAllTracer) TraceBatchQuery(_ context.Context, _ *pgx.Conn, _ pgx.Tr
 
 func (m *mockAllTracer) TraceBatchEnd(_ context.Context, _ *pgx.Conn, _ pgx.TraceBatchEndData) {
 	m.batchEndCalls++
+	if m.endLog != nil {
+		*m.endLog = append(*m.endLog, m.id)
+	}
 }
 
 func (m *mockAllTracer) TracePrepareStart(ctx context.Context, _ *pgx.Conn, _ pgx.TracePrepareStartData) context.Context {
@@ -82,6 +96,9 @@ func (m *mockAllTracer) TracePrepareStart(ctx context.Context, _ *pgx.Conn, _ pg
 
 func (m *mockAllTracer) TracePrepareEnd(_ context.Context, _ *pgx.Conn, _ pgx.TracePrepareEndData) {
 	m.prepareEndCalls++
+	if m.endLog != nil {
+		*m.endLog = append(*m.endLog, m.id)
+	}
 }
 
 func (m *mockAllTracer) TraceCopyFromStart(ctx context.Context, _ *pgx.Conn, _ pgx.TraceCopyFromStartData) context.Context {
@@ -91,6 +108,9 @@ func (m *mockAllTracer) TraceCopyFromStart(ctx context.Context, _ *pgx.Conn, _ p
 
 func (m *mockAllTracer) TraceCopyFromEnd(_ context.Context, _ *pgx.Conn, _ pgx.TraceCopyFromEndData) {
 	m.copyFromEndCalls++
+	if m.endLog != nil {
+		*m.endLog = append(*m.endLog, m.id)
+	}
 }
 
 var _ = Describe("CompositeQueryTracer", func() {
@@ -129,6 +149,16 @@ var _ = Describe("CompositeQueryTracer", func() {
 			Expect(result.Value(contextKey(1))).To(BeTrue())
 			Expect(result.Value(contextKey(2))).To(BeTrue())
 		})
+
+		It("multiple tracers: End called in reverse (LIFO) order", func() {
+			log := []int{}
+			m1 := &mockQueryTracer{id: 1, endLog: &log}
+			m2 := &mockQueryTracer{id: 2, endLog: &log}
+			t := pgxtrace.CompositeQueryTracer{m1, m2}
+			t.TraceQueryStart(ctx, nil, pgx.TraceQueryStartData{})
+			t.TraceQueryEnd(ctx, nil, pgx.TraceQueryEndData{})
+			Expect(log).To(Equal([]int{2, 1}))
+		})
 	})
 
 	// -------------------------------------------------------------------------
@@ -160,6 +190,15 @@ var _ = Describe("CompositeQueryTracer", func() {
 			Expect(result.Value(contextKey(1))).To(BeTrue())
 			Expect(result.Value(contextKey(2))).To(BeTrue())
 		})
+
+		It("multiple full tracers: End called in reverse (LIFO) order", func() {
+			log := []int{}
+			m1 := &mockAllTracer{id: 1, endLog: &log}
+			m2 := &mockAllTracer{id: 2, endLog: &log}
+			t := pgxtrace.CompositeQueryTracer{m1, m2}
+			t.TraceConnectEnd(ctx, pgx.TraceConnectEndData{})
+			Expect(log).To(Equal([]int{2, 1}))
+		})
 	})
 
 	// -------------------------------------------------------------------------
@@ -189,6 +228,15 @@ var _ = Describe("CompositeQueryTracer", func() {
 			result := t.TracePrepareStart(ctx, nil, pgx.TracePrepareStartData{})
 			Expect(result.Value(contextKey(1))).To(BeTrue())
 			Expect(result.Value(contextKey(2))).To(BeTrue())
+		})
+
+		It("multiple full tracers: End called in reverse (LIFO) order", func() {
+			log := []int{}
+			m1 := &mockAllTracer{id: 1, endLog: &log}
+			m2 := &mockAllTracer{id: 2, endLog: &log}
+			t := pgxtrace.CompositeQueryTracer{m1, m2}
+			t.TracePrepareEnd(ctx, nil, pgx.TracePrepareEndData{})
+			Expect(log).To(Equal([]int{2, 1}))
 		})
 	})
 
@@ -223,6 +271,15 @@ var _ = Describe("CompositeQueryTracer", func() {
 			Expect(result.Value(contextKey(1))).To(BeTrue())
 			Expect(result.Value(contextKey(2))).To(BeTrue())
 		})
+
+		It("multiple full tracers: End called in reverse (LIFO) order", func() {
+			log := []int{}
+			m1 := &mockAllTracer{id: 1, endLog: &log}
+			m2 := &mockAllTracer{id: 2, endLog: &log}
+			t := pgxtrace.CompositeQueryTracer{m1, m2}
+			t.TraceBatchEnd(ctx, nil, pgx.TraceBatchEndData{})
+			Expect(log).To(Equal([]int{2, 1}))
+		})
 	})
 
 	// -------------------------------------------------------------------------
@@ -252,6 +309,15 @@ var _ = Describe("CompositeQueryTracer", func() {
 			result := t.TraceCopyFromStart(ctx, nil, pgx.TraceCopyFromStartData{})
 			Expect(result.Value(contextKey(1))).To(BeTrue())
 			Expect(result.Value(contextKey(2))).To(BeTrue())
+		})
+
+		It("multiple full tracers: End called in reverse (LIFO) order", func() {
+			log := []int{}
+			m1 := &mockAllTracer{id: 1, endLog: &log}
+			m2 := &mockAllTracer{id: 2, endLog: &log}
+			t := pgxtrace.CompositeQueryTracer{m1, m2}
+			t.TraceCopyFromEnd(ctx, nil, pgx.TraceCopyFromEndData{})
+			Expect(log).To(Equal([]int{2, 1}))
 		})
 	})
 

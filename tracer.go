@@ -14,7 +14,12 @@ var (
 	_ pgx.CopyFromTracer = CompositeQueryTracer(nil)
 )
 
-// CompositeQueryTracer represent a composite query tracer
+// CompositeQueryTracer chains multiple pgx tracers into one. Every element
+// must implement [pgx.QueryTracer]; elements that also implement
+// [pgx.ConnectTracer], [pgx.BatchTracer], [pgx.PrepareTracer], or
+// [pgx.CopyFromTracer] are automatically dispatched for those operations.
+// Start methods are called in registration order; End methods are called in
+// reverse order, mirroring the stack-unwinding semantics of defer.
 type CompositeQueryTracer []pgx.QueryTracer
 
 // TraceConnectStart implements pgx.ConnectTracer.
@@ -30,8 +35,8 @@ func (t CompositeQueryTracer) TraceConnectStart(ctx context.Context, data pgx.Tr
 
 // TraceConnectEnd implements pgx.ConnectTracer.
 func (t CompositeQueryTracer) TraceConnectEnd(ctx context.Context, data pgx.TraceConnectEndData) {
-	for _, item := range t {
-		if tracer, ok := item.(pgx.ConnectTracer); ok {
+	for i := len(t) - 1; i >= 0; i-- {
+		if tracer, ok := t[i].(pgx.ConnectTracer); ok {
 			tracer.TraceConnectEnd(ctx, data)
 		}
 	}
@@ -50,8 +55,8 @@ func (t CompositeQueryTracer) TracePrepareStart(ctx context.Context, conn *pgx.C
 
 // TracePrepareEnd implements pgx.PrepareTracer.
 func (t CompositeQueryTracer) TracePrepareEnd(ctx context.Context, conn *pgx.Conn, data pgx.TracePrepareEndData) {
-	for _, item := range t {
-		if tracer, ok := item.(pgx.PrepareTracer); ok {
+	for i := len(t) - 1; i >= 0; i-- {
+		if tracer, ok := t[i].(pgx.PrepareTracer); ok {
 			tracer.TracePrepareEnd(ctx, conn, data)
 		}
 	}
@@ -68,8 +73,8 @@ func (t CompositeQueryTracer) TraceQueryStart(ctx context.Context, conn *pgx.Con
 
 // TraceQueryEnd implements pgx.QueryTracer.
 func (t CompositeQueryTracer) TraceQueryEnd(ctx context.Context, conn *pgx.Conn, data pgx.TraceQueryEndData) {
-	for _, tracer := range t {
-		tracer.TraceQueryEnd(ctx, conn, data)
+	for i := len(t) - 1; i >= 0; i-- {
+		t[i].TraceQueryEnd(ctx, conn, data)
 	}
 }
 
@@ -95,8 +100,8 @@ func (t CompositeQueryTracer) TraceBatchQuery(ctx context.Context, conn *pgx.Con
 
 // TraceBatchEnd implements pgx.BatchTracer.
 func (t CompositeQueryTracer) TraceBatchEnd(ctx context.Context, conn *pgx.Conn, data pgx.TraceBatchEndData) {
-	for _, item := range t {
-		if tracer, ok := item.(pgx.BatchTracer); ok {
+	for i := len(t) - 1; i >= 0; i-- {
+		if tracer, ok := t[i].(pgx.BatchTracer); ok {
 			tracer.TraceBatchEnd(ctx, conn, data)
 		}
 	}
@@ -115,8 +120,8 @@ func (t CompositeQueryTracer) TraceCopyFromStart(ctx context.Context, conn *pgx.
 
 // TraceCopyFromEnd implements pgx.CopyFromTracer.
 func (t CompositeQueryTracer) TraceCopyFromEnd(ctx context.Context, conn *pgx.Conn, data pgx.TraceCopyFromEndData) {
-	for _, item := range t {
-		if tracer, ok := item.(pgx.CopyFromTracer); ok {
+	for i := len(t) - 1; i >= 0; i-- {
+		if tracer, ok := t[i].(pgx.CopyFromTracer); ok {
 			tracer.TraceCopyFromEnd(ctx, conn, data)
 		}
 	}
