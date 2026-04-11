@@ -7,11 +7,11 @@ import (
 )
 
 var (
-	_ pgx.QueryTracer    = (*CompositeQueryTracer)(nil)
-	_ pgx.BatchTracer    = (*CompositeQueryTracer)(nil)
-	_ pgx.ConnectTracer  = (*CompositeQueryTracer)(nil)
-	_ pgx.PrepareTracer  = (*CompositeQueryTracer)(nil)
-	_ pgx.CopyFromTracer = (*CompositeQueryTracer)(nil)
+	_ pgx.QueryTracer    = CompositeQueryTracer(nil)
+	_ pgx.BatchTracer    = CompositeQueryTracer(nil)
+	_ pgx.ConnectTracer  = CompositeQueryTracer(nil)
+	_ pgx.PrepareTracer  = CompositeQueryTracer(nil)
+	_ pgx.CopyFromTracer = CompositeQueryTracer(nil)
 )
 
 // CompositeQueryTracer represent a composite query tracer
